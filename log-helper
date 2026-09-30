@@ -5,6 +5,9 @@ readonly EXIT_CONFIG_ERROR=2
 
 : "${LOG_TAG:=aos-unit}"
 
+# Must match ConditionPathExists=/ExecCondition= in aos-unit-node@.service
+readonly NODE_START_GATE="/run/aos-unit/allow-node-start"
+
 # Informational message (stdout)
 log() {
     printf '%s: %s\n' "$LOG_TAG" "$*" >&2

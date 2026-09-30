@@ -558,6 +558,21 @@ launch_all_vms() {
     log "Runner active - VMs managed by systemd"
 }
 
+allow_node_starts() {
+    : >"$NODE_START_GATE"
+}
+
+deny_node_starts() {
+    rm -f "$NODE_START_GATE"
+}
+
+# Close the gate before anything else: once the manager is going down,
+# systemd must not start a guest behind its back
+shutdown_runner() {
+    deny_node_starts
+    exit 0
+}
+
 cleanup_route_monitor() {
     if [[ -n ${IPMON_PID} ]]; then
         log "Shutting down route monitor..."
@@ -621,8 +636,8 @@ start_route_monitoring() {
     log "Route monitor started (PID: ${IPMON_PID})"
 
     # Set up cleanup handler for route monitor
-    trap cleanup_route_monitor EXIT
-    trap 'exit 0' INT TERM
+    trap 'deny_node_starts; cleanup_route_monitor' EXIT
+    trap shutdown_runner INT TERM
 
     route_monitor_loop
 }
@@ -637,10 +652,12 @@ main() {
     validate_config
     prepare_nodes
 
-    trap 'exit 0' SIGTERM SIGINT
+    trap shutdown_runner SIGTERM SIGINT
+    trap deny_node_starts EXIT
 
     log "AosEdge Unit Runner starting (PID: $$)"
 
+    allow_node_starts
     launch_all_vms
 
     if [[ -z ${INTERNET_INTERFACE:-} ]]; then

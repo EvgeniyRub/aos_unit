@@ -656,6 +656,10 @@ wait_for_node_units_cleanup() {
 }
 
 do_cleanup() {
+    # runner closes the gate on SIGTERM; repeat it for a runner that crashed
+    # or was SIGKILLed, so no guest can start during the teardown below
+    rm -f "${NODE_START_GATE}"
+
     wait_for_transient_cleanup "${DNSMASQ_UNIT}"
     wait_for_node_units_cleanup
 
