@@ -123,6 +123,48 @@ wait_for_unit_inactive() {
     return 1
 }
 
+# Service names starting with PREFIX, one per line. Failed units carry a
+# status glyph even with --plain, so match the name anywhere on the line.
+list_units_by_prefix() {
+    systemctl list-units --all --type=service --no-legend --plain "${1}*" 2>/dev/null |
+        grep -o "${1}[^[:space:]]*\.service" || true
+}
+
+# Releases before the template unit ran every VM as a transient
+# aos-unit-node-<name>.service (systemd-run --collect)
+readonly LEGACY_NODE_UNIT_PREFIX="aos-unit-node-"
+# Their TimeoutStopSec=60s plus ExecStopPost
+readonly LEGACY_NODE_UNLOAD_TIMEOUT_SEC=90
+
+# Stop and unload legacy transient VM units left over from an upgrade, so
+# they never run next to the template instances that own the same guests.
+# Returns 1 if any of them did not unload in time.
+migrate_legacy_node_units() {
+    local rc=0 unit remaining
+    local -a units=()
+
+    for unit in $(list_units_by_prefix "$LEGACY_NODE_UNIT_PREFIX"); do
+        if [[ "$(systemctl show -p Transient --value "$unit" 2>/dev/null)" == "yes" ]]; then
+            units+=("$unit")
+        fi
+    done
+    ((${#units[@]})) || return 0
+
+    log "Migrating legacy transient VM units: ${units[*]}"
+    for unit in "${units[@]}"; do
+        request_unit_stop "$unit"
+    done
+
+    local -r deadline=$((SECONDS + LEGACY_NODE_UNLOAD_TIMEOUT_SEC))
+    for unit in "${units[@]}"; do
+        remaining=$((deadline - SECONDS))
+        ((remaining > 0)) || remaining=1
+        wait_for_unit_unloaded "$unit" "$remaining" || rc="${EXIT_RUNTIME_ERROR}"
+    done
+
+    return "$rc"
+}
+
 ip_to_int() {
     local IFS=.
     local -a ipp

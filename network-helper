@@ -638,13 +638,6 @@ do_startup() {
     log "Startup complete"
 }
 
-# Failed units carry a status glyph even with --plain, so match the name
-# anywhere on the line instead of taking the first field
-list_node_instances() {
-    systemctl list-units --all --type=service --no-legend --plain "${NODE_UNIT_TEMPLATE}*" 2>/dev/null |
-        grep -o "${NODE_UNIT_TEMPLATE}[^[:space:]]*\.service" || true
-}
-
 # Instances are static units: they stay loaded after stopping, so wait on
 # ActiveState only. All of them share one deadline because they stop in
 # parallel.
@@ -652,7 +645,7 @@ wait_for_node_units_cleanup() {
     local rc=0 unit remaining
     local -a units
 
-    mapfile -t units < <(list_node_instances)
+    mapfile -t units < <(list_units_by_prefix "$NODE_UNIT_TEMPLATE")
 
     for unit in "${units[@]}"; do
         request_unit_stop "$unit"
@@ -689,6 +682,7 @@ do_cleanup() {
     rm -f "${NODE_START_GATE}"
 
     wait_for_node_units_cleanup || rc=$?
+    migrate_legacy_node_units || rc=$?
     wait_for_transient_cleanup "${DNSMASQ_UNIT}"
 
     # Past the deadline every guest has been SIGKILLed by its own stop

@@ -657,6 +657,9 @@ main() {
 
     log "AosEdge Unit Runner starting (PID: $$)"
 
+    migrate_legacy_node_units ||
+        die "$EXIT_RUNTIME_ERROR" "Legacy transient VM units did not unload"
+
     allow_node_starts
     launch_all_vms
 
