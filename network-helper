@@ -114,7 +114,7 @@ del_nat() {
 
     if ! table_present; then
         log "nft table not present; nothing to remove"
-        exit 0
+        return 0
     fi
 
     log "Removing NAT rules"
