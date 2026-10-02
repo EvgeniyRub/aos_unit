@@ -86,9 +86,9 @@ systemd (host)
 │   ├── ExecStart: runner                # Parse YAML, open node-start gate, start instances, monitor routes
 │   ├── (runtime): route-monitor         # Watches uplink/default-route changes via netlink
 │   ├── (runtime): network-helper        # Applies NAT rules; updated on route changes
-│   └── ExecStopPost: service-cleanup    # Close gate, wait for instances, stop dnsmasq, teardown bridge + nftables
+│   └── ExecStopPost: service-cleanup    # Close gate, wait for instances, stop aos-unit-dns, teardown bridge + nftables
 │
-├── aos-unit-dnsmasq.service             # Transient unit (DHCP + DNS on alt port)
+├── aos-unit-dns.service                 # Packaged sidecar: dnsmasq (DHCP + DNS on alt port)
 │   └── dnsmasq-lease-hook               # DHCP lease event hook
 │
 ├── aos-unit-vm-failed@<name>.service    # Triggered on VM node <name> failure
@@ -111,7 +111,7 @@ Networking is not static. The host's default route may change (e.g., Ethernet �
 * **Deterministic Bridge Naming:** The virtual bridge name is automatically derived from the host's machine-id (`aosbr{machine-id:0:6}`) to ensure uniqueness without conflicts while remaining deterministic across reboots.
 * **Automatic Network Derivation:** Network configuration (bridge IP, DHCP range, netmask) is automatically calculated from a single CIDR parameter (default: 10.200.1.0/24), eliminating manual subnet management and reducing configuration errors.
 * **Host DNS integration:** Host-side resolution of VM names relies on systemd-resolved (resolvectl) being available and running.
-* **DNS Sidecar Architecture:** To avoid conflicts with systemd-resolved, the internal dnsmasq server binds to an alternate port (default 5300). Local nftables rules transparently redirect VM bridge traffic from port 53 to 5300. 
+* **DNS Sidecar Architecture:** To avoid conflicts with systemd-resolved, the internal dnsmasq server binds to an alternate port (default 5300). Local nftables rules transparently redirect VM bridge traffic from port 53 to 5300. The sidecar is the packaged unit `aos-unit-dns.service`, with no dependency on the manager. `service-startup` restarts it once its configuration is written, node instances are ordered after it, and only `service-cleanup` stops it: after every node instance is inactive and before the bridge is removed, so a running guest never loses DHCP or DNS. A transient `aos-unit-dnsmasq` unit left by an older release is stopped and waited for on the first start after an upgrade. The package's maintainer scripts start and stop only `aos-unit.service`.
 * **Deterministic Networking:** Integrated DHCP supports both static reservations and dynamic pools. MAC addresses are hashed from node names to ensure persistent network identities.
 
 ## Fail-Fast Logic & Exit Semantics
@@ -138,7 +138,7 @@ AosEdge Unit deliberately separates VM-level failures from orchestrator-level fa
   * **NFTables Redirect:** Verify the `nftables` rules are successfully catching traffic on port 53 and redirecting it to the `dnsmasq` sidecar: run `sudo nft list chain inet aos_unit prerouting`.
 * **DHCP & IP Assignment:**
   * If a VM has no IP address, verify the active DHCP leases managed by the sidecar: run `cat /run/aos-unit/dnsmasq.leases`.
-  * Inspect the sidecar logs for DHCP handshake errors: run `journalctl -u aos-unit-dnsmasq | grep DHCP`.
+  * Inspect the sidecar logs for DHCP handshake errors: run `journalctl -u aos-unit-dns | grep DHCP`.
 * **NAT & Internet Access:**
   * If a VM cannot reach the internet, verify the host's default route is correctly detected: run `ip route show default`.
   * Ensure the `Smart NAT` masquerade and forward rules are actively applied: run `sudo nft list chain inet aos_unit postrouting` and `sudo nft list chain inet aos_unit forward`.
