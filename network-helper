@@ -41,6 +41,9 @@ readonly NODE_UNIT_TEMPLATE="aos-unit-node@"
 # TimeoutStopSec=120s because cleanup runs as its ExecStopPost
 readonly NODE_STOP_TIMEOUT_SEC=90
 
+# aos-unit-dnsmasq.service TimeoutStopSec=5s, with margin for SIGKILL
+readonly DNSMASQ_STOP_TIMEOUT_SEC=15
+
 readonly DHCP_LEASE_TIME="12h"
 
 readonly WAIT_INTERVAL=0.2
@@ -491,10 +494,7 @@ EOF
 configure_and_start_dnsmasq() {
     local -r conf_file="$RUNTIME_DIRECTORY/dnsmasq.conf"
     local -r leases_file="$RUNTIME_DIRECTORY/dnsmasq.leases"
-
-    if [[ "$(systemctl show -p ActiveState --value "${DNSMASQ_UNIT}.service" 2>/dev/null)" == "active" ]]; then
-        die "${EXIT_RUNTIME_ERROR}" "${DNSMASQ_UNIT} service is already running"
-    fi
+    local -r unit_name="${DNSMASQ_UNIT}.service"
 
     mkdir -p "${RUNTIME_DIRECTORY}/${DHCP_HOSTS_DIR}" "${RUNTIME_DIRECTORY}/${DNS_HOSTS_DIR}"
     touch "$DNS_HOSTS_FILE"
@@ -538,51 +538,19 @@ EOF
         die "${EXIT_RUNTIME_ERROR}" "dnsmasq config test failed"
     }
 
-    log "Starting dnsmasq as transient unit: ${DNSMASQ_UNIT}"
-    systemd-run \
-        --unit="$DNSMASQ_UNIT" \
-        --description="AosEdge dnsmasq @${BRIDGE_IP}" \
-        --property="EnvironmentFile=${RUNTIME_DIRECTORY}/${NETWORK_CONFIG}" \
-        --setenv="RUNTIME_DIRECTORY=${RUNTIME_DIRECTORY}" \
-        --setenv="NETWORK_CONFIG=${NETWORK_CONFIG}" \
-        --setenv="DHCP_HOSTS_DIR=${DHCP_HOSTS_DIR}" \
-        --setenv="DNS_HOSTS_DIR=${DNS_HOSTS_DIR}" \
-        --property="Type=simple" \
-        --property="BindsTo=aos-unit.service" \
-        --property="PartOf=aos-unit.service" \
-        --property="User=aos-unit" \
-        --property="Group=aos-unit" \
-        --property="AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW" \
-        --property="CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW" \
-        --property="RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6" \
-        --property="Restart=on-failure" \
-        --property="RestartSec=1s" \
-        --property="KillMode=control-group" \
-        --property="KillSignal=SIGTERM" \
-        --property="TimeoutStopSec=5s" \
-        --property="SendSIGKILL=yes" \
-        --property="NoNewPrivileges=yes" \
-        --property="PrivateTmp=yes" \
-        --property="ProtectSystem=strict" \
-        --property="ProtectHome=yes" \
-        --property="ProtectKernelTunables=yes" \
-        --property="ProtectKernelModules=yes" \
-        --property="ProtectControlGroups=yes" \
-        --property="ProtectKernelLogs=yes" \
-        --property="PrivateDevices=yes" \
-        --property="LockPersonality=yes" \
-        --property="MemoryDenyWriteExecute=yes" \
-        --property="RestrictNamespaces=yes" \
-        --property="RestrictRealtime=yes" \
-        --property="SystemCallArchitectures=native" \
-        --property="ReadWritePaths=${RUNTIME_DIRECTORY}" \
-        --collect \
-        --quiet -- \
-        /usr/sbin/dnsmasq --keep-in-foreground --conf-file="$conf_file"
+    # Conf first, then restart: restart is a serialized job on the packaged
+    # unit, so a still-running or failed instance never yields "already exists"
+    systemctl reset-failed "$unit_name" 2>/dev/null || true
 
-    if ! systemctl is-active --quiet "${DNSMASQ_UNIT}.service" 2>/dev/null; then
-        systemctl --no-pager -l status "${DNSMASQ_UNIT}.service" 2>&1 | error_multi || true
-        die "${EXIT_RUNTIME_ERROR}" "dnsmasq transient unit failed to start: ${DNSMASQ_UNIT}"
+    log "Starting dnsmasq (unit: ${unit_name})"
+    systemctl restart "$unit_name" || {
+        systemctl --no-pager -l status "$unit_name" 2>&1 | error_multi || true
+        die "${EXIT_RUNTIME_ERROR}" "Failed to start unit: ${unit_name}"
+    }
+
+    if ! systemctl is-active --quiet "$unit_name" 2>/dev/null; then
+        systemctl --no-pager -l status "$unit_name" 2>&1 | error_multi || true
+        die "${EXIT_RUNTIME_ERROR}" "dnsmasq unit failed to become active: ${unit_name}"
     fi
 }
 
@@ -683,7 +651,8 @@ do_cleanup() {
 
     wait_for_node_units_cleanup || rc=$?
     migrate_legacy_node_units || rc=$?
-    wait_for_transient_cleanup "${DNSMASQ_UNIT}"
+    wait_for_unit_inactive "${DNSMASQ_UNIT}.service" "${DNSMASQ_STOP_TIMEOUT_SEC}" || rc="${EXIT_RUNTIME_ERROR}"
+    systemctl reset-failed "${DNSMASQ_UNIT}.service" >/dev/null 2>&1 || true
 
     # Past the deadline every guest has been SIGKILLed by its own stop
     # timeout, so tear the network down anyway and report the failure
