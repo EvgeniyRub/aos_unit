@@ -2,10 +2,13 @@
 Description=AosEdge Unit DNS/DHCP sidecar
 Documentation=man:aos-unit(8)
 
-# Started only from aos-unit ExecStartPre after dnsmasq.conf exists.
-# Do not After= or BindsTo= aos-unit.service: both pull this unit into the
-# manager's restart job and bounce it before conf/hosts are ready.
-# Stopped only by service-cleanup, once every node instance is inactive.
+# Started only from aos-unit ExecStartPre (network-helper) after dnsmasq.conf
+# exists, and stopped only by service-cleanup once every node instance is
+# inactive. Deliberately no dependency on aos-unit.service and no [Install]:
+# - BindsTo=/PartOf= would pull this unit into the manager's restart job and
+#   bounce it before conf/hosts are ready;
+# - After= would queue this start behind the manager's own start job, which
+#   is the job blocked in ExecStartPre waiting for it.
 ConditionPathExists=/run/aos-unit/dnsmasq.conf
 
 [Service]

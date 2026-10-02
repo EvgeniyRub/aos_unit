@@ -8,6 +8,10 @@ Documentation=man:aos-unit(8)
 # ordering edge would let systemd start instances before runner has run.
 BindsTo=aos-unit.service
 
+# Guests need DHCP/DNS for their whole life; when systemd stops both in one
+# transaction (e.g. host shutdown), this stops the nodes before the sidecar.
+After=aos-unit-dnsmasq.service
+
 # Start jobs systemd queues on its own (a manager restart propagated through
 # BindsTo, Restart= during teardown) are skipped, not failed, unless runner
 # has written this node's env file and opened the node-start gate.
