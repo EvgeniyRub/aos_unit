@@ -55,25 +55,9 @@ readonly DNSMASQ_STOP_TIMEOUT_SEC=15
 
 readonly DHCP_LEASE_TIME="12h"
 
-readonly WAIT_INTERVAL=0.2
-
 lock() {
     exec 9>"$NET_LOCK"
     flock -x 9
-}
-
-wait_for_transient_cleanup() {
-    local -r unit_name="$1"
-
-    trap 'die "${EXIT_RUNTIME_ERROR}" "CRITICAL ERROR: Systemd timeout reached! ${unit_name} failed to clean up."' SIGTERM
-
-    systemctl stop "${unit_name}.service" || true
-
-    while [[ "$(systemctl show -p LoadState --value "${unit_name}.service" 2>/dev/null)" != "not-found" ]]; do
-        sleep "${WAIT_INTERVAL}"
-    done
-
-    trap - SIGTERM
 }
 
 table_present() {
