@@ -51,6 +51,10 @@ ExecStart=/usr/libexec/aos-unit/vm-launch %i
 ExecStop=/usr/libexec/aos-unit/vm-shutdown %i
 ExecStopPost=/usr/libexec/aos-unit/network-helper del-vm $NODE_MAC %i $NODE_TAP $NODE_IP
 
+# The node-start gate already keeps Restart= from spawning a guest during
+# teardown, so this only decides recovery. on-failure (not on-abort) also
+# retries exit-code, OOM-kill and ExecStartPre failures, which can be
+# transient on a real host; permanent ones stop at StartLimitBurst.
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=60s
