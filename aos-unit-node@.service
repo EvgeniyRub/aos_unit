@@ -10,7 +10,7 @@ BindsTo=aos-unit.service
 
 # Guests need DHCP/DNS for their whole life; when systemd stops both in one
 # transaction (e.g. host shutdown), this stops the nodes before the sidecar.
-After=aos-unit-dnsmasq.service
+After=aos-unit-dns.service
 
 # Start jobs systemd queues on its own (a manager restart propagated through
 # BindsTo, Restart= during teardown) are skipped, not failed, unless runner
