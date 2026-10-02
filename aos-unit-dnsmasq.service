@@ -5,7 +5,7 @@ Documentation=man:aos-unit(8)
 # Started only from aos-unit ExecStartPre after dnsmasq.conf exists.
 # Do not After= or BindsTo= aos-unit.service: both pull this unit into the
 # manager's restart job and bounce it before conf/hosts are ready.
-# Stop is propagated from aos-unit.service via PropagatesStopTo=.
+# Stopped only by service-cleanup, once every node instance is inactive.
 ConditionPathExists=/run/aos-unit/dnsmasq.conf
 
 [Service]

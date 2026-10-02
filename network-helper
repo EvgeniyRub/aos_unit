@@ -651,6 +651,10 @@ do_cleanup() {
 
     wait_for_node_units_cleanup || rc=$?
     migrate_legacy_node_units || rc=$?
+
+    # Only stopped here, after every guest is gone: a running VM must never
+    # lose DHCP/DNS. Nothing else stops the sidecar.
+    request_unit_stop "${DNSMASQ_UNIT}.service"
     wait_for_unit_inactive "${DNSMASQ_UNIT}.service" "${DNSMASQ_STOP_TIMEOUT_SEC}" || rc="${EXIT_RUNTIME_ERROR}"
     systemctl reset-failed "${DNSMASQ_UNIT}.service" >/dev/null 2>&1 || true
 
