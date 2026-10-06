@@ -11,6 +11,7 @@ to run, and what a pass looks like.
 ## Contents
 
 - [Before you run](#before-you-run)
+- [Selecting tests](#selecting-tests)
 - [Background in two minutes](#background-in-two-minutes)
 - [Issue #9 / PR #12: wait for leftover transient units](#issue-9--pr-12-wait-for-leftover-transient-units)
 - [Issue #11 / PR #13: VMs as static template units](#issue-11--pr-13-vms-as-static-template-units)
@@ -57,6 +58,30 @@ when it ends with:
 - `RESULT: ALL CHECKS PASSED` for the `phase*`, `upgrade-*` and `package-*` scripts
 - `PASS=<n> FAIL=0` for `die-shutdown-order-matrix.sh`
 - `STATIC: PASS` for `static-checks.sh`
+
+## Selecting tests
+
+Each script takes test IDs differently. **Subcases** (`T2.3a`, `T2.5c`) are labels
+inside a run — you cannot pass them on the CLI; run `T2.3` or `T2.5` instead.
+
+| Script | How to pick tests | Example |
+|---|---|---|
+| `die-shutdown-order-matrix.sh` | `--cases "ID …"` or mode flags | `sudo bash tests/die-shutdown-order-matrix.sh --cases "L1 L2"` |
+| | `--helpers-only` = H1–H8, no guests | `sudo bash tests/die-shutdown-order-matrix.sh --helpers-only` |
+| | *(no args)* = full matrix | `sudo bash tests/die-shutdown-order-matrix.sh` |
+| `phase3-acceptance.sh` | positional `T3.x` (default: all runtime tests) | `sudo bash tests/phase3-acceptance.sh T3.1 T3.3` |
+| `phase3-helpers.sh` | no IDs — always T3.H | `sudo bash tests/phase3-helpers.sh` |
+| `phase2-acceptance.sh` | positional `T2.x` (default: T2.1 T2.2 T2.3 T2.5) | `sudo bash tests/phase2-acceptance.sh T2.5` |
+| `upgrade-acceptance.sh` | one ID: `T3.6` or `T2.3` | `sudo bash tests/upgrade-acceptance.sh old.deb new.deb T3.6` |
+| `package-checks.sh` | one ID: `T3.7` or `T2.4` | `sudo bash tests/package-checks.sh pkg.deb T2.4 --remove` |
+| `phase3-restart-matrix.sh` | policy: `on-failure` / `on-abort` | `sudo bash tests/phase3-restart-matrix.sh on-failure` |
+
+**Why two styles?** PR #12 has many case IDs plus flags (`--setup-images`, …), so
+cases use `--cases`. Phase 2/3 only expose a few top-level IDs and use plain
+arguments.
+
+**Inside a run:** `T2.5` prints blocks `T2.5a` … `T2.5d`; `T2.3` runs `T2.3a`
+then `T2.3b`. The traceability ledger may cite subcases (e.g. “2 FAIL in T2.5c”).
 
 ## Background in two minutes
 
@@ -245,6 +270,7 @@ Run (PR #14 installed):
 
 ```bash
 sudo bash tests/phase2-acceptance.sh                      # T2.1 T2.2 T2.3 T2.5, ~30 min
+sudo bash tests/phase2-acceptance.sh T2.5                 # one test (runs T2.5a–d)
 sudo bash tests/package-checks.sh ~/aos-debs/aos-unit_1.2.0~pr14+*.deb T2.4 --remove
 
 # T2.3 as a real upgrade, from the release and from PR #13
