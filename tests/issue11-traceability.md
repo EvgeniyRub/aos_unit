@@ -98,10 +98,15 @@ README/man wording). Commits:
 
 ## Findings outside the review's list
 
-| ID | Finding | Scope | Evidence |
-|----|---------|-------|----------|
-| F-1 | Upgrading a running v1.1.2: new `network-helper` requires `DHCP_START` (main `2c17366`) but the old runtime `network.conf` lacks it, so the old instance's cleanup aborts, the first new start fails "Bridge already exists", and `Restart=on-failure` heals it on the second start. | Pre-existing on main, not caused by Phase 3 | `phase3-S3.5-from-v1.1.2-*`, journal 53680-53692 |
-| F-2 | `runner` exits 143 on SIGTERM while blocked in the route-monitor `read` (bash logs `Terminated IFS= read -r -u ...`, then the EXIT trap runs), leaving `aos-unit.service` failed after an otherwise complete teardown. Seen 4 times: 0.6 s after monitor start (S3.5), 18.6 s (S3.8 `dpkg -r`), and 4 s in T2.5c twice in a row (3 of 133 stops on 2026-10-02). Not triggered by an early stop alone (0/8, `probe-early-stop.sh`); T2.5c's busy DNS port with a crash-looping sidecar makes it frequent. `origin/main` has the identical structure (`set -Eeuo pipefail`, `trap 'exit 0' INT TERM`, EXIT trap kill+wait on the coproc). Not reproduced in 28 + 120 isolated probes on bash 5.3.9 (`probe-runner-sigterm.sh`, `probe-errexit-trap.sh`). A low-risk mitigation would be `SuccessExitStatus=143` on `aos-unit.service`. | Pre-existing, rare; report only | journal 54082.57; `phase2-S2.7-phase2-*` T2.5c, journal 10:08:14.657 |
-| F-3 | Stopping the manager before guests have booted makes every node hit `TimeoutStopSec=60s` (ACPI ignored) and fire `OnFailure`. Expected; `57f2627` tags it "(during manager stop)". | Behaviour, documented | `phase3-S3.3-*` pre-test teardown |
-| F-4 | With the DNS port already taken, the manager start succeeds and stays active while dnsmasq crash-loops (`Type=simple`, so the post-restart `is-active` check sees it as started). Same shape as the transient unit on main. | Pre-existing, report only | `phase2-S2.5-*` T2.5c |
-| F-5 | dnsmasq logs "duplicate dhcp-host IP address" while node `ExecStopPost` rewrites the hosts file during teardown. Not investigated. | Observation | `probe-stop-journal.sh` output |
+Things we saw while testing that are **not** R12/R13/R14 failures: pre-existing
+bugs, expected behaviour, or noise. Listed separately so a FAIL in the journal
+does not get read as “the PR broke this requirement.” Harness knobs such as
+`KNOWN_V112_SELF_HEAL=1` exist for F-1 only.
+
+| ID | What we saw | Why not a req fail | Seen in |
+|----|-------------|-------------------|---------|
+| F-1 | Upgrade from running v1.1.2: first new start fails `Bridge already exists`, second start OK (`DHCP_START` missing in old `network.conf`) | Pre-existing on `main` | T3.6 upgrade from v1.1.2 |
+| F-2 | Rare `runner` exit 143 after otherwise complete teardown (SIGTERM during route-monitor `read`) | Pre-existing on `main`; report only | T2.5c; not reproduced by `probe-early-stop.sh` |
+| F-3 | Stop before guests boot: nodes hit 60 s stop timeout and log `VM unit FAILED (during manager stop)` | Expected | T3.3 pre-test teardown |
+| F-4 | DNS port taken: manager stays active while dnsmasq crash-loops | Pre-existing on `main` | T2.5c |
+| F-5 | dnsmasq `duplicate dhcp-host` during teardown | Observation; not investigated | `probe-stop-journal.sh` |
