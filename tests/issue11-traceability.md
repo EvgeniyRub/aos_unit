@@ -96,17 +96,21 @@ README/man wording). Commits:
 | S2.7 rerun | `7bf97eb` | T2.5 | T2.5c: same 2 FAIL = F-2 again; T2.5a/b/d PASS |
 | F-2 probe | `7bf97eb` | 8 x (start, 5 s, stop), no port holder | 0/8 exit 143 |
 
-## Findings outside the review's list
+## Known journal noise (out of PR scope)
 
-Things we saw while testing that are **not** R12/R13/R14 failures: pre-existing
-bugs, expected behaviour, or noise. Listed separately so a FAIL in the journal
-does not get read as “the PR broke this requirement.” Harness knobs such as
-`KNOWN_V112_SELF_HEAL=1` exist for F-1 only.
+Journal lines seen while testing that are **not** R12/R13/R14 failures. Listed
+separately so a scary log does not get read as “the PR broke this requirement.”
+Some are real bugs on `main`; they are still out of scope for PR #13/#14 sign-off.
 
-| ID | What we saw | Why not a req fail | Seen in |
-|----|-------------|-------------------|---------|
-| F-1 | Upgrade from running v1.1.2: first new start fails `Bridge already exists`, second start OK (`DHCP_START` missing in old `network.conf`) | Pre-existing on `main` | T3.6 upgrade from v1.1.2 |
-| F-2 | Rare `runner` exit 143 after otherwise complete teardown (SIGTERM during route-monitor `read`) | Pre-existing on `main`; report only | T2.5c; not reproduced by `probe-early-stop.sh` |
-| F-3 | Stop before guests boot: nodes hit 60 s stop timeout and log `VM unit FAILED (during manager stop)` | Expected | T3.3 pre-test teardown |
-| F-4 | DNS port taken: manager stays active while dnsmasq crash-loops | Pre-existing on `main` | T2.5c |
-| F-5 | dnsmasq `duplicate dhcp-host` during teardown | Observation; not investigated | `probe-stop-journal.sh` |
+**Disposition:** `expected` = correct behaviour for the scenario; `fix-later` =
+pre-existing product issue, file separately; `uninvestigated` = noted, not chased.
+
+Harness knob `KNOWN_V112_SELF_HEAL=1` downgrades F-1 journal lines to `INFO`.
+
+| ID | What we saw | Disposition | Why not a req fail | Seen in |
+|----|-------------|-------------|-------------------|---------|
+| F-1 | Upgrade from running v1.1.2: first new start fails `Bridge already exists`, second start OK (`DHCP_START` missing in old `network.conf`) | fix-later | Pre-existing on `main`; self-heals on restart | T3.6 upgrade from v1.1.2 |
+| F-2 | Rare `runner` exit 143 after otherwise complete teardown (SIGTERM during route-monitor `read`) | fix-later | Pre-existing on `main`; teardown complete, next start clean | T2.5c; not reproduced by `probe-early-stop.sh` |
+| F-3 | Stop before guests boot: nodes hit 60 s stop timeout and log `VM unit FAILED (during manager stop)` | expected | By design when stop races guest boot; scripts wait for guests first | T3.3 pre-test teardown |
+| F-4 | DNS port taken: manager stays active while dnsmasq crash-loops | fix-later | Pre-existing on `main`; stop still tears down cleanly | T2.5c |
+| F-5 | dnsmasq `duplicate dhcp-host` during teardown | uninvestigated | Not classified; may be harmless ordering noise | `probe-stop-journal.sh` |

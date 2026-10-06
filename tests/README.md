@@ -17,7 +17,7 @@ to run, and what a pass looks like.
 - [Issue #11 / PR #14: dnsmasq as a static unit](#issue-11--pr-14-dnsmasq-as-a-static-unit)
 - [PR #15: local builds on WSL](#pr-15-local-builds-on-wsl)
 - [Regression: what to rerun](#regression-what-to-rerun)
-- [Known results that are not bugs](#known-results-that-are-not-bugs)
+- [Known journal noise (out of PR scope)](#known-journal-noise-out-of-pr-scope)
 - [Scripts](#scripts)
 
 ## Before you run
@@ -279,13 +279,18 @@ must also pass the earlier suite.
 PR #12 is a separate line of work on the old transient design: its matrix does
 not apply to the PR #13/#14 packages, and their suites do not apply to PR #12.
 
-## Known results that are not bugs
+## Known journal noise (out of PR scope)
 
-| ID | You may see | Why |
-|---|---|---|
-| F-1 | Upgrade from v1.1.2: first new start fails `Bridge ... already exists`, systemd restarts once and it works | Pre-existing on `main`: the old instance's `network.conf` lacks `DHCP_START`, so its cleanup aborts. Set `KNOWN_V112_SELF_HEAL=1`; those lines become `INFO` |
-| F-2 | Rarely, `aos-unit.service` ends `failed` with runner exit 143 after a complete teardown, mostly in T2.5c (port taken) | Pre-existing on `main`: SIGTERM lands while bash is blocked in the route-monitor `read`. Teardown is correct; rerun the case |
-| F-3 | Stopping before guests have booted: nodes hit their 60 s stop timeout and log `VM unit FAILED (during manager stop)` | Expected. The scripts wait for guests to boot before stopping |
+Real bugs on `main`, expected behaviour, or uninvestigated log lines — not
+R12/R13/R14 failures. Full ledger: [issue11-traceability.md](issue11-traceability.md).
+
+| ID | You may see | Disposition | Why |
+|---|---|---|---|
+| F-1 | Upgrade from v1.1.2: first new start fails `Bridge ... already exists`, systemd restarts once and it works | fix-later | Pre-existing on `main`: old `network.conf` lacks `DHCP_START`, cleanup aborts. Set `KNOWN_V112_SELF_HEAL=1`; those lines become `INFO` |
+| F-2 | Rarely, `aos-unit.service` ends `failed` with runner exit 143 after a complete teardown, mostly in T2.5c (port taken) | fix-later | Pre-existing on `main`: SIGTERM during route-monitor `read`. Teardown is correct; rerun the case |
+| F-3 | Stopping before guests have booted: nodes hit their 60 s stop timeout and log `VM unit FAILED (during manager stop)` | expected | By design. Scripts wait for guests to boot before stopping |
+| F-4 | DNS port taken: manager stays active while dnsmasq crash-loops | fix-later | Pre-existing on `main`; stop still tears down cleanly |
+| F-5 | dnsmasq `duplicate dhcp-host` during teardown | uninvestigated | Not classified |
 
 ## Scripts
 
