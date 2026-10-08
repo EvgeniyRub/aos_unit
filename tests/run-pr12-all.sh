@@ -2,7 +2,7 @@
 # Run PR #12 / issue #9 test matrix and write summary to /tmp/aos-pr12-test-summary.txt
 set -uo pipefail
 
-REPO="/mnt/c/Users/YevhenRuban/PycharmProjects/aos_unit"
+REPO="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
 OUT="/tmp/aos-pr12-test-summary.txt"
 MATRIX="/tmp/aos-unit-matrix-results.txt"
 IMAGES="/var/tmp/aos-core-v6.1.2"

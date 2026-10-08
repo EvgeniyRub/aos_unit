@@ -36,7 +36,7 @@ Build and install a package from any git ref (branch, tag, commit). The build
 runs in a temp dir on the Linux filesystem, so it works from `/mnt/c` too:
 
 ```bash
-cd /path/to/aos_unit                     # set REPO=... if not the default path
+cd /path/to/aos_unit
 git fetch fork                           # PR branches live on the fork
 mkdir -p ~/aos-debs
 bash tests/build-deb.sh <ref> <version> ~/aos-debs   # prints the .deb path last

@@ -9,7 +9,7 @@
 
 set -u
 
-readonly REPO="${1:-/mnt/c/Users/YevhenRuban/PycharmProjects/aos_unit}"
+readonly REPO="${1:-$(cd "$(dirname "$(realpath "$0")")/.." && pwd)}"
 readonly LIBEXEC=/usr/libexec/aos-unit
 readonly UNIT_DIR=/lib/systemd/system
 readonly NODES=(main secondary)

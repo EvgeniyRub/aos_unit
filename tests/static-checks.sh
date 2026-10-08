@@ -5,7 +5,7 @@
 
 set -u
 
-readonly REPO="${1:-/mnt/c/Users/YevhenRuban/PycharmProjects/aos_unit}"
+readonly REPO="${1:-$(cd "$(dirname "$(realpath "$0")")/.." && pwd)}"
 cd "$REPO" || exit 1
 
 rc=0
