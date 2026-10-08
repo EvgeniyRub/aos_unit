@@ -7,7 +7,8 @@
 
 set -Eeuo pipefail
 
-readonly REPO="${REPO:-$(cd "$(dirname "$(realpath "$0")")/.." && pwd)}"
+_repo="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+readonly REPO="${REPO:-$_repo}"
 readonly ref="${1:?git ref or WORKTREE required}"
 readonly ver="${2:?base version required}"
 readonly out="${3:-/var/tmp/aos-debs}"

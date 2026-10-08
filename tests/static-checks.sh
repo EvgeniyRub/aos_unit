@@ -5,7 +5,8 @@
 
 set -u
 
-readonly REPO="${1:-$(cd "$(dirname "$(realpath "$0")")/.." && pwd)}"
+_repo="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+readonly REPO="${1:-$_repo}"
 cd "$REPO" || exit 1
 
 rc=0

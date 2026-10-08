@@ -4,7 +4,8 @@
 
 set -u
 
-readonly T="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+_t="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+readonly T="$_t"
 readonly DEBS=/var/tmp/aos-debs
 
 for step in "$@"; do

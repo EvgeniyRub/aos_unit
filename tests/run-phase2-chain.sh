@@ -5,7 +5,8 @@
 
 set -u
 
-readonly T="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+_t="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+readonly T="$_t"
 readonly DEBS=/var/tmp/aos-debs
 readonly DNS_ENV="AOS_DNSMASQ=aos-unit-dns.service NEW_DNS_UNIT=aos-unit-dns.service EXPECT_DNSMASQ_TRANSIENT=no"
 

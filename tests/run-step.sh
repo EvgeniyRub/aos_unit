@@ -7,7 +7,8 @@
 
 set -uo pipefail
 
-readonly REPO="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+_repo="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+readonly REPO="$_repo"
 readonly ref="$1" ver="$2" label="$3" script="$4"
 shift 4
 
