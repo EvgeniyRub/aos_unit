@@ -11,7 +11,8 @@ readonly REPO=/mnt/c/Users/YevhenRuban/PycharmProjects/aos_unit
 readonly ref="$1" ver="$2" label="$3" script="$4"
 shift 4
 
-readonly out="${REPO}/tests/results/${label}-$(date +%Y%m%d-%H%M).txt"
+_ts="$(date +%Y%m%d-%H%M)"
+readonly out="${REPO}/tests/results/${label}-${_ts}"
 mkdir -p "${REPO}/tests/results"
 
 {

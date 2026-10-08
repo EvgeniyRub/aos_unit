@@ -73,7 +73,7 @@ expect_running() {
     check "dnsmasq: MainPID is dnsmasq" "dnsmasq" \
         "$(basename "$(readlink -f "/proc/$(show "$DNSMASQ" MainPID)/exe" 2>/dev/null)" 2>/dev/null)"
     check "dnsmasq.conf exists" "yes" \
-        "$( [[ -f /run/aos-unit/dnsmasq.conf ]] && echo yes || echo no )"
+        "$([[ -f /run/aos-unit/dnsmasq.conf ]] && echo yes || echo no)"
     for node in "${NODES[@]}"; do
         unit="$(unit_of "$node")"
         check "${node}: ActiveState" "active" "$(show "$unit" ActiveState)"

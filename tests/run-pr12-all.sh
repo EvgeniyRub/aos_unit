@@ -39,8 +39,8 @@ run_block "helpers H1-H8" \
 
 run_block "cluster matrix G/P/D/L/C/V/N/O on AosCore 6.1.2" \
     bash "${REPO}/tests/die-shutdown-order-matrix.sh" \
-        --setup-images "$IMAGES" \
-        --cases "G1 P1 P2 P3 D1 D2 D3 D4 L1 L2 C1 V1 V2 V3 V4 V5 N1 N2 N3 N4 O1"
+    --setup-images "$IMAGES" \
+    --cases "G1 P1 P2 P3 D1 D2 D3 D4 L1 L2 C1 V1 V2 V3 V4 V5 N1 N2 N3 N4 O1"
 
 if [[ -f $MATRIX ]]; then
     echo "========== MATRIX FILE =========="
