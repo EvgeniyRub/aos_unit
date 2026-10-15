@@ -33,16 +33,7 @@ readonly DNS_HOSTS_FILE="${RUNTIME_DIRECTORY}/${DNS_HOSTS_DIR}/hosts"
 readonly DNS_ALT_PORT="${DNS_ALT_PORT:-5300}"
 readonly UPSTREAM_DNS="${UPSTREAM_DNS:-127.0.0.53}"
 
-readonly DNSMASQ_UNIT="aos-unit-dns.service"
-
-# Releases before the packaged sidecar ran dnsmasq as this transient unit
-# (systemd-run --collect). The packaged unit has a different name on purpose:
-# once a transient unit is collected, systemd keeps resolving its name to the
-# deleted transient file until the next daemon-reload, which aos-unit may not
-# run. Remove the migration once no supported release runs it any more.
-readonly LEGACY_DNSMASQ_UNIT="aos-unit-dnsmasq.service"
-# Its TimeoutStopSec=5s, with margin for SIGKILL
-readonly LEGACY_DNSMASQ_UNLOAD_TIMEOUT_SEC=15
+readonly DNSMASQ_UNIT="aos-unit-dnsmasq.service"
 
 readonly NODE_UNIT_TEMPLATE="aos-unit-node@"
 
@@ -50,7 +41,7 @@ readonly NODE_UNIT_TEMPLATE="aos-unit-node@"
 # TimeoutStopSec=120s because cleanup runs as its ExecStopPost
 readonly NODE_STOP_TIMEOUT_SEC=90
 
-# aos-unit-dns.service TimeoutStopSec=5s, with margin for SIGKILL
+# aos-unit-dnsmasq.service TimeoutStopSec=5s, with margin for SIGKILL
 readonly DNSMASQ_STOP_TIMEOUT_SEC=15
 
 readonly DHCP_LEASE_TIME="12h"
@@ -484,26 +475,16 @@ EOF
     log "nft skeleton applied (table inet aos_unit)"
 }
 
-# The legacy transient dnsmasq binds the same bridge sockets, so it must be
-# gone before the packaged unit starts. Transient units only: they unload
-# once stopped, so LoadState=not-found is the signal.
-migrate_legacy_dnsmasq() {
-    [[ "$(systemctl show -p Transient --value "$LEGACY_DNSMASQ_UNIT" 2>/dev/null)" == "yes" ]] || return 0
-
-    log "Migrating legacy transient unit: ${LEGACY_DNSMASQ_UNIT}"
-    request_unit_stop "$LEGACY_DNSMASQ_UNIT"
-    wait_for_unit_unloaded "$LEGACY_DNSMASQ_UNIT" "$LEGACY_DNSMASQ_UNLOAD_TIMEOUT_SEC"
-}
-
 configure_and_start_dnsmasq() {
     local -r conf_file="$RUNTIME_DIRECTORY/dnsmasq.conf"
     local -r leases_file="$RUNTIME_DIRECTORY/dnsmasq.leases"
     local -r unit_name="$DNSMASQ_UNIT"
     local load transient
 
-    migrate_legacy_dnsmasq ||
-        die "${EXIT_RUNTIME_ERROR}" "Legacy ${LEGACY_DNSMASQ_UNIT} did not unload"
-
+    # Older releases ran this name as a transient unit. preinst unloads it
+    # before the unit file is installed; a name that was reloaded while the
+    # transient still existed stays bound to it until the next daemon-reload,
+    # which aos-unit cannot run, so fail instead of restarting the transient.
     load="$(systemctl show -p LoadState --value "$unit_name" 2>/dev/null)" || load=""
     transient="$(systemctl show -p Transient --value "$unit_name" 2>/dev/null)" || transient=""
     if [[ $load != "loaded" || $transient != "no" ]]; then
@@ -668,9 +649,7 @@ do_cleanup() {
     migrate_legacy_node_units || rc=$?
 
     # Only stopped here, after every guest is gone: a running VM must never
-    # lose DHCP/DNS. Nothing else stops the sidecar. After a package upgrade
-    # this runs against the old instance, whose sidecar is still transient.
-    migrate_legacy_dnsmasq || rc="${EXIT_RUNTIME_ERROR}"
+    # lose DHCP/DNS. Nothing else stops the sidecar.
     request_unit_stop "$DNSMASQ_UNIT"
     wait_for_unit_inactive "$DNSMASQ_UNIT" "${DNSMASQ_STOP_TIMEOUT_SEC}" || rc="${EXIT_RUNTIME_ERROR}"
     systemctl reset-failed "$DNSMASQ_UNIT" >/dev/null 2>&1 || true
