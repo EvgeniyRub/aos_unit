@@ -2,15 +2,16 @@
 # Phase 2 (PR #14) acceptance against the INSTALLED package.
 #   T2.1  start -> restart x2 -> stop: static dnsmasq, Transient=no each time
 #   T2.2  teardown order nodes -> dnsmasq -> bridge (+ SIGSTOPped guest)
-#   T2.3  leftover legacy transient aos-unit-dnsmasq at start (upgrades: see
-#         upgrade-acceptance.sh)
+#   T2.3  a transient aos-unit-dnsmasq cannot be created next to the unit file
+#         (the migration itself is the package upgrade: upgrade-acceptance.sh,
+#         phase2-preinst-stuck.sh)
 #   T2.5  dnsmasq failure shapes end with a clean stop and a clean next start
 #
 # Usage: phase2-acceptance.sh [T2.1] [T2.2] [T2.3] [T2.5]    (default: all)
 
 set -u
 
-AOS_DNSMASQ="${AOS_DNSMASQ:-aos-unit-dns.service}"
+AOS_DNSMASQ="${AOS_DNSMASQ:-aos-unit-dnsmasq.service}"
 . "$(dirname "$(realpath "$0")")/lib-issue11.sh"
 SUMMARY=/tmp/aos-phase2-summary.txt
 
@@ -136,50 +137,32 @@ t2_2() {
     assert_clean_stop T2.2 "SIGSTOP stop"
 }
 
-# A legacy transient sidecar as old releases created it (systemd-run --collect),
-# but without their BindsTo=/PartOf=, so it outlives the manager like a stuck
-# or slow-to-stop one would
-plant_legacy_dnsmasq() {
-    systemd-run --quiet --collect --unit="$AOS_LEGACY_DNSMASQ" --property=TimeoutStopSec="$1" \
-        bash -c "trap '' TERM; while :; do sleep 1; done"
-    check T2.3 "${2}: legacy transient planted" "active yes" \
-        "$(show "$AOS_LEGACY_DNSMASQ" ActiveState) $(show "$AOS_LEGACY_DNSMASQ" Transient)"
-}
-
+# The packaged sidecar reuses the transient name, so the only migration point
+# is the package upgrade. At runtime, with the unit file installed, systemd
+# must refuse a same-name transient, or it could shadow the file again.
 t2_3() {
-    local since rc t0
-    say "T2.3a legacy transient dnsmasq still running at start"
+    local since out rc
+    say "T2.3 same-name transient refused while the unit file is installed"
     clean_slate
-    since="$(now)"
-    plant_legacy_dnsmasq 3s ghost
-    systemctl start aos-unit.service
-    assert_clean_start T2.3 ghost
-    check T2.3 "ghost: legacy unloaded" not-found "$(show "$AOS_LEGACY_DNSMASQ" LoadState)"
-    check T2.3 "ghost: migration logged" 1 \
-        "$(journal_units "$since" | grep -c "Migrating legacy transient unit: ${AOS_LEGACY_DNSMASQ}")"
-    check T2.3 "ghost: first start, no manager restart" 0 \
-        "$(journal_units "$since" | grep -c 'aos-unit.service: Scheduled restart job')"
-    wait_guests_booted
-    systemctl stop aos-unit.service
-    assert_clean_stop T2.3 "ghost: stop"
-
-    say "T2.3b legacy transient dnsmasq that outlives the unload timeout"
-    clean_slate
-    since="$(now)"
-    plant_legacy_dnsmasq 40s stuck
-    t0="$(date +%s)"
-    systemctl start aos-unit.service
+    out="$(systemd-run --quiet --collect --unit="$AOS_DNSMASQ" sleep 600 2>&1)"
     rc=$?
-    info T2.3 "stuck: first start exit code / seconds" "${rc} / $(($(date +%s) - t0))"
-    check T2.3 "stuck: first start fails" yes "$( ((rc != 0)) && echo yes || echo no)"
-    check T2.3 "stuck: unload timeout reported" yes \
-        "$(journal_units "$since" | grep -q "Legacy ${AOS_LEGACY_DNSMASQ} did not unload" && echo yes || echo no)"
-    check_cmd T2.3 "stuck: self-heals once the ghost is killed (150s)" wait_until 150 all_nodes_active
-    assert_dnsmasq_static T2.3 "stuck: healed"
-    check T2.3 "stuck: legacy unloaded" not-found "$(show "$AOS_LEGACY_DNSMASQ" LoadState)"
+    info T2.3 "systemd-run exit code / message" "${rc} / ${out}"
+    check T2.3 "transient refused" yes "$( ((rc != 0)) && echo yes || echo no)"
+    if ((rc == 0)); then
+        systemctl stop "$AOS_DNSMASQ"
+        systemctl daemon-reload
+    fi
+    check T2.3 "sidecar still loaded from its file" "loaded no" \
+        "$(show "$AOS_DNSMASQ" LoadState) $(show "$AOS_DNSMASQ" Transient)"
+    since="$(now)"
+    systemctl start aos-unit.service
+    assert_clean_start T2.3 "start after refusal"
+    check T2.3 "no automatic manager restart" 0 \
+        "$(journal_units "$since" | grep -c 'aos-unit.service: Scheduled restart job')"
+    check_no_race T2.3 "$since"
     wait_guests_booted
     systemctl stop aos-unit.service
-    assert_clean_stop T2.3 "stuck: stop"
+    assert_clean_stop T2.3 stop
 }
 
 t2_5_case() {

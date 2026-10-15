@@ -7,12 +7,8 @@
 
 set -u
 
-# The packaged sidecar if this deb ships one, else the legacy transient name
 . "$(dirname "$(realpath "$0")")/lib-issue11.sh"
-DNS_UNIT="$AOS_DNSMASQ"
-if dpkg-deb -c "$1" | grep -q 'aos-unit-dns\.service'; then
-    DNS_UNIT=aos-unit-dns.service
-fi
+readonly DNS_UNIT="$AOS_DNSMASQ"
 
 readonly DEB="$1" ID="$2" DO_REMOVE="${3:-}"
 SUMMARY="/tmp/aos-package-${ID}-summary.txt"
@@ -25,11 +21,20 @@ say "${ID}: maintainer scripts of $(basename "$DEB")"
 actions() {
     grep -RnE "(deb-systemd-invoke|deb-systemd-helper|systemctl).*$1" "$ctl" 2>/dev/null || true
 }
-for unit in 'aos-unit-node@' 'aos-unit-dnsmasq' 'aos-unit-dns\.service' 'aos-unit-vm-failed@'; do
+for unit in 'aos-unit-node@' 'aos-unit-dnsmasq' 'aos-unit-vm-failed@'; do
     hits="$(actions "$unit")"
     check "$ID" "no maintscript action on ${unit}" "" "$hits"
     [[ -z $hits ]] || sed 's/^/        /' <<<"$hits"
 done
+# The review's literal check. preinst may name the sidecar, but only to read
+# its state; every systemctl verb it runs must target aos-unit.service.
+mentions="$(grep -Rn 'aos-unit-dnsmasq' "$ctl" 2>/dev/null || true)"
+info "$ID" "grep -R aos-unit-dnsmasq (lines)" "$(sed '/^$/d' <<<"$mentions" | wc -l)"
+[[ -z $mentions ]] || sed 's/^/        /' <<<"$mentions"
+verbs="$(grep -RhoE '(systemctl|deb-systemd-invoke)( -[-a-z]+)* (start|stop|restart|try-restart|reload-or-restart|kill|enable|disable|mask) [^;|&]*' "$ctl" 2>/dev/null |
+    grep -v "aos-unit.service" || true)"
+check "$ID" "systemctl verbs only on aos-unit.service" "" "$verbs"
+[[ -z $verbs ]] || sed 's/^/        /' <<<"$verbs"
 check "$ID" "maintscripts manage aos-unit.service" yes \
     "$([[ -n $(actions "'aos-unit.service'") ]] && echo yes || echo no)"
 named="$(grep -RhoE "'aos-unit[^']*'" "$ctl" | sort -u | tr '\n' ' ')"

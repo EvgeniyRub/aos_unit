@@ -4,8 +4,8 @@
 readonly AOS_CONFIG=/etc/aos-unit/unit_config.yaml
 readonly AOS_RUN=/run/aos-unit
 readonly AOS_GATE="${AOS_RUN}/allow-node-start"
-# Sidecar under test: transient aos-unit-dnsmasq up to Phase 3, packaged
-# aos-unit-dns from Phase 2 on
+# Sidecar under test: transient up to Phase 3, packaged from Phase 2 on, both
+# named aos-unit-dnsmasq
 readonly AOS_LEGACY_DNSMASQ=aos-unit-dnsmasq.service
 : "${AOS_DNSMASQ:=${AOS_LEGACY_DNSMASQ}}"
 readonly AOS_DNSMASQ
@@ -96,7 +96,7 @@ failures_log_lines() { if [[ -f $AOS_FAILURES_LOG ]]; then wc -l <"$AOS_FAILURES
 
 journal_units() {
     journalctl --no-pager --since "$1" -o short-monotonic \
-        -u aos-unit.service -u "$AOS_LEGACY_DNSMASQ" -u aos-unit-dns.service \
+        -u aos-unit.service -u "$AOS_LEGACY_DNSMASQ" \
         -u 'aos-unit-node@*' -u 'aos-unit-node-*' \
         -u 'aos-unit-vm-failed@*' 2>/dev/null
 }

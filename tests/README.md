@@ -235,26 +235,30 @@ sudo bash tests/phase3-restart-matrix.sh on-failure       # T3.4, optional, ~1 h
 
 - Issue: [#11 Refactor aos-unit systemd architecture](https://github.com/aosedge/aos_unit/issues/11) (Phase 2)
 - PR: [#14 feat(systemd): Phase 2 static dnsmasq unit](https://github.com/aosedge/aos_unit/pull/14), stacked on PR #13
-- Package: PR #14. The static unit is named `aos-unit-dns.service` (see D-1).
-  Scripts: [phase2-acceptance.sh](phase2-acceptance.sh), [upgrade-acceptance.sh](upgrade-acceptance.sh), [package-checks.sh](package-checks.sh)
+- Package: PR #14. The static unit keeps the transient's name, `aos-unit-dnsmasq.service` (see "Same-name migration").
+  Scripts: [phase2-acceptance.sh](phase2-acceptance.sh), [upgrade-acceptance.sh](upgrade-acceptance.sh), [phase2-preinst-stuck.sh](phase2-preinst-stuck.sh), [package-checks.sh](package-checks.sh), runner [run-14-dnsmasq-name-verify.sh](run-14-dnsmasq-name-verify.sh)
 
 | Req | Requirement | Source | Tests | Pass when |
 |---|---|---|---|---|
 | R14-1 | No `PropagatesStopTo=`; `service-cleanup` is the only thing that stops dnsmasq | [Review, "PropagatesStopTo= violates the intended shutdown ordering"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371230073) | T2.1, T2.2 | Each restart gives dnsmasq a new PID; stop is clean |
 | R14-2 | Stop order is nodes, then dnsmasq, then the network: a running VM never loses DHCP | same comment | T2.2 | Journal: last node stopped before dnsmasq stops, dnsmasq stopped before `Removing bridge`; with a frozen guest dnsmasq stays active until that guest is gone |
-| R14-3 | Migrate the old transient dnsmasq: check `Transient=yes`, stop it, bounded wait for `not-found`, then start the static unit | [Review, "upgrade from transient dnsmasq to static dnsmasq is not handled"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371287028) | T2.3 | T2.3a: leftover migrated on the first start. T2.3b: a leftover that will not stop fails the start with `did not unload`, then self-heals |
-| R14-4 | Real package upgrade: first start succeeds and the sidecar reports `Transient=no` | same comment | T2.3 (upgrade) | After `dpkg -i` over a running older package: `aos-unit-dns.service` active, `Transient=no`, packaged `FragmentPath`; legacy `aos-unit-dnsmasq` not-found |
+| R14-3 | Migrate the old transient dnsmasq: check `Transient=yes`, stop it, bounded wait for `not-found`, then start the static unit | [Review, "upgrade from transient dnsmasq to static dnsmasq is not handled"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371287028) | T2.3 (upgrade), T2.3c | `preinst` reports stopping the manager for the sidecar and no unload timeout. T2.3c: a transient that will not unload fails `preinst` with `did not unload within`, leaves the old package installed, and the retry succeeds |
+| R14-4 | Real package upgrade: first start succeeds and the sidecar reports `Transient=no` | same comment | T2.3 (upgrade) | After `dpkg -i` over a running older package: `aos-unit-dnsmasq.service` active, `Transient=no`, packaged `FragmentPath`, no automatic manager restart |
 | R14-5 | Debian maintainer scripts manage only `aos-unit.service` | [Review, "Debian must not independently manage aos-unit-dnsmasq.service"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371307431) | T2.4 | The only unit named in the maintainer scripts is `'aos-unit.service'` |
-| R14-6 | `dpkg-deb -e` plus grep finds no dnsmasq start/stop/restart | same comment | T2.4 | No maintainer-script action on `aos-unit-dns.service` or `aos-unit-dnsmasq`; `dpkg -r` while running is clean |
-| R14-7 | No VM lifecycle changes here: the gate and restart policy live in PR #13; the node template only gains `After=aos-unit-dns.service` | [Review, "Restart=on-abort and the node-start gate do not belong here"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371342364) | review, T3.* on PR #14 | `git diff fork/feat/11-phase3-vm-template-units fork/feat/11-phase2-dnsmasq-static-unit -- aos-unit-node@.service` adds only that `After=`; PR #13 suite passes on the PR #14 package |
+| R14-6 | `dpkg-deb -e` plus grep finds no dnsmasq start/stop/restart | same comment | T2.4 | No maintainer-script action on `aos-unit-dnsmasq`; every `systemctl` verb targets `aos-unit.service` (`preinst` names the sidecar only to read its state); `dpkg -r` while running is clean |
+| R14-7 | No VM lifecycle changes here: the gate and restart policy live in PR #13; the node template only gains `After=aos-unit-dnsmasq.service` | [Review, "Restart=on-abort and the node-start gate do not belong here"](https://github.com/aosedge/aos_unit/pull/14#issuecomment-5371342364) | review, T3.* on PR #14 | `git diff fork/feat/11-phase3-vm-template-units fork/feat/11-phase2-dnsmasq-static-unit -- aos-unit-node@.service` adds only that `After=`; PR #13 suite passes on the PR #14 package |
 | R14-8 | Remaining transient machinery removed; dnsmasq failures still end clean | [Issue #11](https://github.com/aosedge/aos_unit/issues/11), "Next PR" list in the [PR #13 comment](https://github.com/aosedge/aos_unit/pull/13#issuecomment-5371128694) | T2.5 | Each failure shape ends in a clean stop and a clean next start |
 
-**Deviation D-1.** The static unit is `aos-unit-dns.service`, not the old
-transient name `aos-unit-dnsmasq.service`. Once systemd has collected a
-transient unit, the name keeps resolving to the deleted transient definition
-until the next `daemon-reload`, which the `aos-unit` user cannot run, so a
-same-name static unit fails its first start after an upgrade. The migration
-itself follows the review's steps unchanged.
+**Same-name migration.** If `daemon-reload` runs while the transient
+`aos-unit-dnsmasq` is loaded, the name stays bound to it; once it is collected
+the name is `not-found` until the next `daemon-reload`, which the `aos-unit`
+user cannot run ([probe-transient-shadow.sh](probe-transient-shadow.sh)). So
+the review's steps run in `preinst upgrade`, before the unit file is unpacked:
+if the sidecar is `Transient=yes`, stop `aos-unit.service` (the old release
+tears down its own sidecar in its own order), then wait, bounded, for
+`LoadState=not-found`. debhelper's `postinst` then reloads and restarts the
+manager, which starts the packaged unit. No maintainer script starts, stops or
+restarts the sidecar itself.
 
 What each test does:
 
@@ -262,7 +266,8 @@ What each test does:
 |---|---|
 | T2.1 | Start, restart twice, stop. dnsmasq active, `Transient=no`, packaged file, new PID per restart, no automatic manager restart |
 | T2.2 | Stop order from journal timestamps. T2.2b repeats with one guest frozen (SIGSTOP) |
-| T2.3 | T2.3a: a legacy transient `aos-unit-dnsmasq` still running at start. T2.3b: one that ignores SIGTERM for 40 s |
+| T2.3 | With the unit file installed, `systemd-run --unit=aos-unit-dnsmasq` is refused and the next start is clean. As an upgrade (`upgrade-acceptance.sh`): from a running v1.1.2, main or PR #13 package |
+| T2.3c | `phase2-preinst-stuck.sh`: a transient `aos-unit-dnsmasq` that nothing stops makes `preinst` fail within its timeout; after it is gone the upgrade succeeds |
 | T2.4 | Extract the `.deb` maintainer scripts and grep them; `dpkg -r` while running |
 | T2.5 | dnsmasq SIGKILL (a), SIGSTOP at stop (b), DNS port taken (c), failed dnsmasq left over at start (d) |
 
@@ -274,11 +279,16 @@ sudo bash tests/phase2-acceptance.sh T2.5                 # one test (runs T2.5a
 sudo bash tests/package-checks.sh ~/aos-debs/aos-unit_1.2.0~pr14+*.deb T2.4 --remove
 
 # T2.3 as a real upgrade, from the release and from PR #13
-DNS="AOS_DNSMASQ=aos-unit-dns.service NEW_DNS_UNIT=aos-unit-dns.service EXPECT_DNSMASQ_TRANSIENT=no"
-sudo env $DNS KNOWN_V112_SELF_HEAL=1 bash tests/upgrade-acceptance.sh \
+DNS="NEW_DNS_UNIT=aos-unit-dnsmasq.service EXPECT_DNSMASQ_TRANSIENT=no"
+sudo env $DNS bash tests/upgrade-acceptance.sh \
     ~/aos-debs/aos-unit_1.1.2+*.deb ~/aos-debs/aos-unit_1.2.0~pr14+*.deb T2.3
 sudo env $DNS BASELINE_NODES=static bash tests/upgrade-acceptance.sh \
     ~/aos-debs/aos-unit_1.2.0~pr13+*.deb ~/aos-debs/aos-unit_1.2.0~pr14+*.deb T2.3
+sudo bash tests/phase2-preinst-stuck.sh \
+    ~/aos-debs/aos-unit_1.1.2+*.deb ~/aos-debs/aos-unit_1.2.0~pr14+*.deb
+
+# Everything above for one git ref, one result file per step
+sudo bash tests/run-14-dnsmasq-name-verify.sh <ref>
 ```
 
 ## PR #15: local builds on WSL
@@ -300,7 +310,7 @@ must also pass the earlier suite.
 | Any PR | S1 [static-checks.sh](static-checks.sh), with that branch checked out (it checks tracked files): `bash tests/static-checks.sh "$PWD"` |
 | PR #12 | `die-shutdown-order-matrix.sh` (all cases) |
 | PR #13 | T3.H, T3.1–T3.3, T3.5, T3.8, T3.7, T3.6 |
-| PR #14 | Everything for PR #13 **plus** T2.1–T2.5 and T2.3 upgrades. Run the PR #13 scripts with `AOS_DNSMASQ=aos-unit-dns.service` |
+| PR #14 | Everything for PR #13 **plus** T2.1–T2.5, T2.3 upgrades and T2.3c |
 
 PR #12 is a separate line of work on the old transient design: its matrix does
 not apply to the PR #13/#14 packages, and their suites do not apply to PR #12.
@@ -327,6 +337,9 @@ R12/R13/R14 failures. Full ledger: [issue11-traceability.md](issue11-traceabilit
 | [phase3-helpers.sh](phase3-helpers.sh) | PR #13/#14: T3.H |
 | [phase3-restart-matrix.sh](phase3-restart-matrix.sh) | PR #13: T3.4 (optional) |
 | [phase2-acceptance.sh](phase2-acceptance.sh) | PR #14: T2.1, T2.2, T2.3, T2.5 |
+| [phase2-preinst-stuck.sh](phase2-preinst-stuck.sh) | PR #14: T2.3c preinst timeout on stuck transient |
+| [run-14-dnsmasq-name-verify.sh](run-14-dnsmasq-name-verify.sh) | PR #14: sequential runner (upgrades, T2.3c, phase2/3) |
+| [run-f1-upgrade-verify.sh](run-f1-upgrade-verify.sh) | PR #17: T3.6 upgrade from v1.1.2 without self-heal env |
 | [upgrade-acceptance.sh](upgrade-acceptance.sh) | T3.6, T2.3 real package upgrades |
 | [package-checks.sh](package-checks.sh) | T3.7, T2.4 maintainer scripts and `dpkg -r` |
 | [static-checks.sh](static-checks.sh) | S1: shellcheck, shfmt, `systemd-analyze verify` |

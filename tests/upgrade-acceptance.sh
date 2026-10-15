@@ -22,7 +22,7 @@ readonly BASE_DEB="$1" NEW_DEB="$2" ID="$3"
 : "${EXPECT_DNSMASQ_TRANSIENT:=yes}"
 # Baseline runs nodes as legacy transient units or as Phase 3 static instances
 : "${BASELINE_NODES:=transient}"
-# Sidecar unit after the upgrade (Phase 2: aos-unit-dns.service)
+# Sidecar unit after the upgrade (same name in every phase)
 : "${NEW_DNS_UNIT:=${AOS_DNSMASQ}}"
 : "${KNOWN_V112_SELF_HEAL:=0}"
 : "${BASELINE_SETTLE_SEC:=90}"
@@ -80,6 +80,8 @@ assert_upgraded() {
     check "$ID" "${label}: ${NEW_DNS_UNIT} Transient" "$EXPECT_DNSMASQ_TRANSIENT" "$(show "$NEW_DNS_UNIT" Transient)"
     if [[ $NEW_DNS_UNIT != "$AOS_LEGACY_DNSMASQ" ]]; then
         check "$ID" "${label}: legacy ${AOS_LEGACY_DNSMASQ} gone" not-found "$(show "$AOS_LEGACY_DNSMASQ" LoadState)"
+    fi
+    if [[ $EXPECT_DNSMASQ_TRANSIENT == no ]]; then
         local frag
         frag="$(show "$NEW_DNS_UNIT" FragmentPath)"
         check "$ID" "${label}: ${NEW_DNS_UNIT} FragmentPath packaged" yes \
@@ -126,7 +128,11 @@ main() {
     assert_upgraded "after upgrade"
     check_upgrade_window "$since"
     info "$ID" "migration logged" "$(journal_units "$since" | grep -c 'Migrating legacy transient VM units')"
-    info "$ID" "dnsmasq migration logged" "$(journal_units "$since" | grep -c "Migrating legacy transient unit: ${AOS_LEGACY_DNSMASQ}")"
+    if [[ $EXPECT_DNSMASQ_TRANSIENT == no && $NEW_DNS_UNIT == "$AOS_LEGACY_DNSMASQ" ]]; then
+        check "$ID" "preinst stopped the manager for the sidecar" 1 \
+            "$(grep -c "Stopping aos-unit.service to replace the transient ${AOS_LEGACY_DNSMASQ}" /tmp/aos-upgrade-dpkg.log)"
+        check "$ID" "dpkg log: no preinst unload timeout" 0 "$(grep -c 'did not unload' /tmp/aos-upgrade-dpkg.log)"
+    fi
 
     say "${ID}: planted leftover legacy transient node"
     wait_guests_booted
